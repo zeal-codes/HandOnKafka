@@ -1,1 +1,1 @@
-"[LinkedIn-Learning] Kafka Tutorial" 
+[LinkedIn-Learning] Kafka Tutorial

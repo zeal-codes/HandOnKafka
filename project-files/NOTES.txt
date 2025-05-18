@@ -1,0 +1,152 @@
+BROKER:
+=======
+A Kafka broker is the central brain behind everything that Kafka does.
+A broker is nothing but a running Kafka instance.
+It is a physical process that runs on the base operating system and executes all Kafka functions.
+A Kafka process listens on a specific port. Usually this is 9092, but it is configurable.
+The Kafka broker receives messages from producers and stores them locally in logs.
+Consumers subscribe to specific topics within the Kafka broker.
+The broker keeps track of all the active consumers.
+It knows about the last message that was sent to the consumer,
+so it only sends new messages in the subscribed topics to that consumer.
+It also keeps a heartbeat with every consumer so when a consumer dies, it can track and reset.
+Kafka brokers manage the lifecycle of topics.
+They track and manage topic partitions. They also manage the corresponding partition logs.
+Multiple Kafka brokers can be clustered together to form a single Kafka cluster.
+Within a Kafka cluster, there is one Kafka broker instance that will act as the active controller for the cluster.
+In addition, each partition will have a corresponding Kafka broker as its leader.
+The leader then manages the specific partition.
+A Kafka broker also takes care of replicating topic partitions across multiple brokers, so even if one broker goes down
+the other brokers can take over the corresponding topic partitions.
+This provides fault tolerance for Kafka.
+
+LOGS:
+=====
+Kafka logs are the physical files in which data is stored before they are consumed by the consumers.
+Logs are managed by Kafka brokers. Each broker has an assigned log directory where it stores the log files.
+There are multiple log files created in Kafka. Each broker will have its own log directory.
+Under the directory, there are separate files for each topic and partition.
+These are rolling files, so, when a file gets filled up, it's rolled over and
+a new file is created to continue the logging process.
+So, each partition will have multiple log files in the log directory.
+Data in Kafka is only kept for a configured interval of time. The default is seven days.
+A separate thread in Kafka keeps pruning files that are over this period.
+Log files are an important consideration for managing a Kafka instance,
+since they influence the amount of physical space that needs to be provisioned.
+Lack of space would lead to the broker rejecting data from producers and a breakdown of data processing pipelines.
+All configuration for Kafka is in the server.properties file, under the config folder of the Kafka route directory.
+The log.dirs parameter is used to set the path of the log directory.
+
+PARTITIONS:
+==========
+
+Partitions control the ingestion, storage, and consumption of messages.
+As discussed previously, each topic can contain multiple partitions.
+A topic can have 1-n partitions. The number of partitions are set up during topic creation.
+The maximum number of partitions per cluster and per topic varies based on the specific version of Kafka.c
+Partitions allow Kafka to scale by parallelizing ingestion, storage, and consumption of messages.
+It provides horizontal scalability.
+However, creating too many partitions may result in increased memory usage and file handles.
+Each partition has separate physical log files which, of course, will grow lower as they reach configured sizes.
+A given message in Kafka is stored in only one partition.
+Each partition is assigned a broker process known as the leader broker.
+In order to write to a specific partition, the message needs to be sent towards corresponding leader.
+The leader then takes care of updating its log file as well as replicating that partition to other copies.
+The leader will also send data to the subscribers of the partition.
+With multiple partitions for a topic, consumers can share workloads by partitions using consumer groups.
+Partitions can be replicated for fault tolerance purposes. There are a few things to note about partitions.
+These significantly impact the performance and latency of the pipelines.
+Each published message gets stored in only one partition.
+If the partition is replicated, each replicated copy will also get one instance of the message.
+Message ordering is guaranteed only within a partition.
+So in the example provided, messages are pushed to Kafka in the order from M1 to M8. M1, M3, and M7
+are guaranteed to be delivered to the consumer in the same sequence as they belong to a single partition.
+But, on the other hand, there is no guarantee of ordering between M1 and M2 as they belong to different partitions.
+It's possible for M2 to be delivered before M1.
+The partition for a message is determined by the message key.
+Kafka uses a hashing function to allocate a partition based on the message key.
+Messages with the same key will always end up in the same partition.
+It is important to choose keys that have an equal distribution of its values.
+Otherwise, some partitions may be overloaded while others would be used minimally.
+The number of partitions cannot be decreased after the topic is created.
+Hence, care should be taken to set the right size of partitions during creation time.
+
+
+CONSUMER-GROUPS:
+================
+What is a consumer group? A consumer group is a group of consumers that share a topic workload.
+A topic may be generating hundreds of messages in a short amount of time.
+It may not be possible for a single consumer process to keep up with processing these messages.
+For scalability, multiple consumer processes can be started and the messages can be distributed among them
+for load balancing.
+A consumer group is a logical group of consumers that Kafka uses for such load distribution.
+Each message will be sent to only one consumer within the consumer group.
+That consumer is then responsible for processing the message and acknowledging back to Kafka.
+Consumers split workload among themselves through partitions.
+Kafka keeps track of the active number of consumers for each given topic.
+It then distributes the topics evenly between these consumers.
+Kafka only considers the number of partitions for distribution, not the number of messages expected in each partition.
+It is expected that the number of partitions are equal to or higher than the number of consumers in the group.
+If there are more consumers than partitions, then there will be consumers with no work
+as the lowest granularity of work distribution is a partition.
+We can create multiple consumer groups, each with a different set of consumers.
+Each group will then get a full copy of all the messages
+but each message will be sent to only one consumer within each consumer group.
+When new consumers come up or existing consumers go down,
+Kafka takes care of re-balancing the load by reassigning the partitions among live consumers.
+Kafka uses heartbeats with consumers to keep track of their health.
+
+Let's look at an example for consumer groups here. We have a topic called orders.
+It has three partitions, P1 to P3. There are eight messages numbered M1 to M8.
+There are two consumer groups created. The first consumer group is an analytics consumer group that has three consumers.
+The second consumer group is an audit consumer group that only has two consumers.
+For the analytics consumer group, as the number of partitions and consumers are equal,
+Kafka assigns one partition per consumer.
+For the audit consumer group, as the number of consumers are less than the number of partitions,
+Kafka assigns one partition to the first consumer and two partitions to the second consumer.
+But both consumer groups get a copy of all the messages.
+
+
+CONSUMER-OFFSET MANAGEMENT:
+===========================
+When Kafka pushes messages to consumers, it also needs to ensure reliable delivery.
+Kafka ensures, at least once, guaranteed delivery using consumer offsets.
+What is a consumer offset? It is a number to track message consumption by each consumer and partition.
+As each message is received by Kafka, it allocates a message ID to that message.
+Kafka then maintains this message ID offset on a consumer and partition basis to track its consumption.
+Kafka brokers keep track of both what is sent to the consumer and
+what is acknowledged by the consumer by using two offset values.
+The current offset value tracks the last message ID that was sent to the consumer.
+The committed offset value tracks the last message that is acknowledged by the consumer.
+As consumers receive a message, they have the option of acknowledging immediately
+or after making sure that all required processing is done.
+This helps consumers to manage transactions and not lose messages in case of failures.
+By default, Kafka consumers ought to acknowledge and receive it, but this can also be changed at the consumer end.
+When Kafka brokers do not receive ack within a set timeout, they will resend the message to the same consumer.
+This ensures at least once delivery of each message to the consumer group.
+A message can be delivered multiple times if acknowledgement does not happen within a timeout,
+but each message will be delivered at least once.
+When a new consumer starts up, it has the option of requesting messages either from the start, only the latest,
+or from a given offset.
+This allows the consumers to process messages based on their use case requirements.
+Let's look at an example of offset management by Kafka.
+Let's say we have a partition being consumed by a consumer called Consumer 1.
+Consumer 1 is set to start with the latest message.
+So in step one here, Kafka will set the current and committed offset to 4,
+which is the latest message at the time Consumer 1 starter.
+In step two, a new message, message 1, comes into the Kafka partition, which is then immediately sent to Consumer 1.
+The current offset is incremented by 1 to a value of 5. The committed offset stays at 4.
+In step three, Consumer 1 acknowledges message 1. Committed offset is also incremented to 5.
+Step four, another message, message 2, comes into the partition and is sent to Consumer 1.
+Current offset increases to 6. In step five, Consumer 1 crashes.
+As a result, the broker's heartbeat with the consumer is broken.
+So, the broker resets the current offset back to 5, as it has not received an acknowledgement for the new message.
+In step six, a rebalancing step happens and the partition gets reallocated to another consumer,
+namely Consumer 2, which is within the same consumer group.
+Consumer 2 will start receiving messages from where Consumer 1 left off.
+In step seven, Consumer 2 will receive message 2 that was not originally acknowledged by Consumer 1.
+So the current offset goes up to 6.
+In step eight, Consumer 2 acknowledges message 2.
+Committed offset is also updated to 6.
+This process ensures that there is no message that is left off
+and all the messages are delivered to the consumers at least once.
